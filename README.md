@@ -20,6 +20,19 @@ from soc_url_analyzer import analyze_url
 print(json.dumps(analyze_url("https://example.com/path"), indent=2))
 ```
 
+Pass a collection of domain names to flag exact matches and subdomains:
+
+```python
+analyze_url("https://login.bad.example/path", domain_blocklist={"bad.example"})
+# findings includes {"code": "blocked_domain", ...}; suspicious is True
+```
+
+The default blocklist is empty. Entries are normalized to lowercase IDNA ASCII,
+and a trailing dot is removed. Matching uses DNS label boundaries:
+`login.bad.example` matches `bad.example`, while `notbad.example` does not.
+IP literals match only identical IP entries. Invalid blocklist entries raise
+`ValueError`. The comparison is local and never resolves a hostname.
+
 ```json
 {
   "url": "https://example.com/path",
@@ -47,6 +60,7 @@ Each finding has a stable `code` and an explanatory `message`:
 
 | Code | Pattern |
 | --- | --- |
+| `blocked_domain` | Hostname matches a configured domain or its subdomain |
 | `unencrypted_http` | HTTP scheme |
 | `embedded_credentials` | User information before `@` |
 | `ip_literal` | IPv4 or IPv6 hostname |

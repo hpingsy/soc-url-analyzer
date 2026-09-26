@@ -137,3 +137,40 @@ def test_no_findings(url):
     assert result["valid"]
     assert not result["suspicious"]
     assert result["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "url,blocklist",
+    [
+        ("https://bad.example", {"bad.example"}),
+        ("https://login.bad.example", {"bad.example"}),
+        ("https://LOGIN.BAD.EXAMPLE.", {"Bad.Example."}),
+        ("https://bücher.example", {"BÜCHER.EXAMPLE"}),
+        ("https://192.0.2.1", {"192.0.2.1"}),
+    ],
+)
+def test_blocked_domain(url, blocklist):
+    result = analyze_url(url, domain_blocklist=blocklist)
+    assert result["valid"]
+    assert result["suspicious"]
+    assert "blocked_domain" in {finding["code"] for finding in result["findings"]}
+
+
+@pytest.mark.parametrize(
+    "url,blocklist",
+    [
+        ("https://bad.example", ()),
+        ("https://notbad.example", {"bad.example"}),
+        ("https://bad.example.evil", {"bad.example"}),
+        ("https://example", {"bad.example"}),
+        ("https://192.0.2.2", {"192.0.2.1"}),
+    ],
+)
+def test_domain_not_blocked(url, blocklist):
+    result = analyze_url(url, domain_blocklist=blocklist)
+    assert result["valid"]
+    assert "blocked_domain" not in {finding["code"] for finding in result["findings"]}
+
+
+def test_invalid_url_never_checks_blocklist():
+    assert analyze_url("not a URL", domain_blocklist={"bad.example"})["findings"] == []

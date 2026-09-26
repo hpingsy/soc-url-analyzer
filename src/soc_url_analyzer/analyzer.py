@@ -2,6 +2,7 @@
 
 import ipaddress
 import re
+from collections.abc import Iterable
 from typing import TypedDict
 from urllib.parse import unquote, urlsplit
 
@@ -39,11 +40,25 @@ def _hostname(value: str) -> tuple[str, bool]:
     return host, False
 
 
-def analyze_url(url: object) -> AnalysisResult:
+def _blocked(host: str, is_ip: bool, domains: Iterable[str]) -> bool:
+    """Compare normalized hosts by label boundaries, without resolving them."""
+    for domain in domains:
+        if not isinstance(domain, str) or not domain:
+            raise ValueError("Blocklist entries must be non-empty domain strings.")
+        normalized, domain_is_ip = _hostname(domain)
+        if host == normalized or (
+            not is_ip and not domain_is_ip and host.endswith("." + normalized)
+        ):
+            return True
+    return False
+
+
+def analyze_url(url: object, domain_blocklist: Iterable[str] = ()) -> AnalysisResult:
     """Analyze an absolute HTTP(S) URL locally; findings do not prove maliciousness.
 
     Invalid input returns errors rather than raising. Hostnames use lowercase IDNA
-    ASCII form; IP literals use canonical form. No network access is performed.
+    ASCII form; IP literals use canonical form. The optional blocklist matches
+    exact hosts and subdomains, using label boundaries. No network access is performed.
     """
     result: AnalysisResult = {
         "url": url if isinstance(url, str) else None,
@@ -88,6 +103,11 @@ def analyze_url(url: object) -> AnalysisResult:
 
     result.update(valid=True, scheme=parts.scheme, hostname=host)
     checks = [
+        (
+            _blocked(host, is_ip, domain_blocklist),
+            "blocked_domain",
+            "Hostname matches the configured domain blocklist.",
+        ),
         (parts.scheme == "http", "unencrypted_http", "URL uses unencrypted HTTP."),
         (parts.username is not None, "embedded_credentials", "URL contains user information."),
         (is_ip, "ip_literal", "Hostname is an IP address."),
